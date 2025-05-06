@@ -10,13 +10,18 @@ pub struct ShellScreen {
 
 impl ShellScreen {
     pub fn new() -> Self {
-        let (rl, thread) = raylib::init().size(800, 600).title("Raylib Shell").build();
+        let (rl, thread) = raylib::init()
+            .size(800, 600)
+            .title("DBD Deemak Shell")
+            .build();
 
         Self {
             rl,
             thread,
             input_buffer: String::new(),
-            output_lines: vec!["Type commands and press Enter".to_string()],
+            output_lines: vec![
+                "Type commands and press Enter. Try `help` for more info.".to_string(),
+            ],
         }
     }
 
@@ -113,16 +118,8 @@ impl ShellScreen {
 
         // Parse and execute command
         let parts: Vec<&str> = input.split_whitespace().collect();
+        let output = commands::cmd_manager(&parts);
 
-        match parts[0] {
-            "echo" => {
-                let output = commands::echo(&parts[1..]);
-                self.output_lines.push(output);
-            }
-            _ => {
-                self.output_lines
-                    .push(format!("Command not found: {}", parts[0]));
-            }
-        }
+        self.output_lines.push(output);
     }
 }
