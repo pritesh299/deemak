@@ -1,3 +1,4 @@
+use deemak::commands;
 use raylib::prelude::*;
 
 pub struct ShellScreen {
@@ -115,7 +116,7 @@ impl ShellScreen {
 
         match parts[0] {
             "echo" => {
-                let output = parts[1..].join(" ");
+                let output = commands::echo(&parts[1..]);
                 self.output_lines.push(output);
             }
             _ => {
