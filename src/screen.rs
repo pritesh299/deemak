@@ -1,3 +1,4 @@
+use crate::keys::key_to_char;
 use commands::CommandResult;
 use deemak::commands;
 use raylib::prelude::*;
@@ -46,42 +47,15 @@ impl ShellScreen {
             }
             Some(key) => {
                 // Only accept printable ASCII characters
-                if let Some(c) = Self::key_to_char(self, key) {
+                let shift = self.rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                    || self.rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
+
+                if let Some(c) = key_to_char(key, shift) {
                     self.input_buffer.push(c);
                 }
             }
             None => {}
         }
-    }
-
-    fn key_to_char(&self, key: KeyboardKey) -> Option<char> {
-        let c = match key {
-            KeyboardKey::KEY_SPACE => ' ',
-            KeyboardKey::KEY_APOSTROPHE => '\'',
-            KeyboardKey::KEY_COMMA => ',',
-            KeyboardKey::KEY_MINUS => '-',
-            KeyboardKey::KEY_PERIOD => '.',
-            KeyboardKey::KEY_SLASH => '/',
-            KeyboardKey::KEY_ZERO => '0',
-            // ... add all other keys you want to support
-            _ => {
-                // Handle letters (both lowercase and uppercase)
-                if key as i32 >= KeyboardKey::KEY_A as i32
-                    && key as i32 <= KeyboardKey::KEY_Z as i32
-                {
-                    if self.rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
-                        || self.rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT)
-                    {
-                        (b'A' + (key as u8 - KeyboardKey::KEY_A as u8)) as char
-                    } else {
-                        (b'a' + (key as u8 - KeyboardKey::KEY_A as u8)) as char
-                    }
-                } else {
-                    return None;
-                }
-            }
-        };
-        Some(c)
     }
 
     pub fn draw(&mut self) {
@@ -123,7 +97,8 @@ impl ShellScreen {
         let parts: Vec<&str> = input.split_whitespace().collect();
         match commands::cmd_manager(&parts) {
             CommandResult::Output(output) => {
-                self.output_lines.extend(output.split("\n").map(|s| s.to_string()));
+                self.output_lines
+                    .extend(output.split("\n").map(|s| s.to_string()));
             }
             CommandResult::Clear => {
                 self.output_lines.clear();
