@@ -1,4 +1,3 @@
-mod commands;
 mod keys;
 mod screen;
 

@@ -2,13 +2,15 @@ use crate::keys::key_to_char;
 use commands::CommandResult;
 use deemak::commands;
 use raylib::prelude::*;
+use std::path::PathBuf;
 
 pub struct ShellScreen {
     rl: RaylibHandle,
     thread: RaylibThread,
     input_buffer: String,
     output_lines: Vec<String>,
-    close_window: bool,
+    current_dir: PathBuf,
+    root_dir: PathBuf,
 }
 
 impl ShellScreen {
@@ -18,6 +20,8 @@ impl ShellScreen {
             .title("DBD Deemak Shell")
             .build();
 
+        let root_dir = Self::find_sekai_root().expect("Sekai root directory not found");
+
         Self {
             rl,
             thread,
@@ -25,8 +29,27 @@ impl ShellScreen {
             output_lines: vec![
                 "Type commands and press Enter. Try `help` for more info.".to_string(),
             ],
-            close_window: false,
+            root_dir: root_dir.clone(),
+            current_dir: root_dir, // Both point to same path initially
         }
+    }
+
+    /// Finds the Sekai root directory by looking for the `sekai/info.json` file
+    fn find_sekai_root() -> Option<PathBuf> {
+        let mut current = std::env::current_dir().ok()?;
+
+        loop {
+            let info_path = current.join("sekai/info.json");
+            if info_path.exists() {
+                return Some(current.join("sekai"));
+            }
+
+            if !current.pop() {
+                break;
+            }
+        }
+
+        None
     }
 
     pub fn window_should_close(&self) -> bool {
@@ -95,7 +118,12 @@ impl ShellScreen {
 
         // Parse and execute command
         let parts: Vec<&str> = input.split_whitespace().collect();
-        match commands::cmd_manager(&parts) {
+        match commands::cmd_manager(&parts, &mut self.current_dir, &self.root_dir) {
+            CommandResult::ChangeDirectory(new_dir, message) => {
+                self.current_dir = new_dir;
+                self.output_lines
+                    .extend(message.split("\n").map(|s| s.to_string()));
+            }
             CommandResult::Output(output) => {
                 self.output_lines
                     .extend(output.split("\n").map(|s| s.to_string()));
@@ -106,8 +134,7 @@ impl ShellScreen {
                     .push("Type commands and press Enter. Try `help` for more info.".to_string());
             }
             CommandResult::Exit => {
-                self.output_lines.push("Exiting...".to_string());
-                // TODO: Add exit logic
+                std::process::exit(1);
             }
             CommandResult::NotFound => {
                 self.output_lines
