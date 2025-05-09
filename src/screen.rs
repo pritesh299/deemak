@@ -14,6 +14,20 @@ pub struct ShellScreen {
     root_dir: PathBuf,
 }
 
+pub const DEEMAK_BANNER: &str = r#"
+ _____                            _    
+|  __ \                          | |   
+| |  | | ___  ___ _ __ ___   __ _| | __
+| |  | |/ _ \/ _ \ '_ ` _ \ / _` | |/ /
+| |__| |  __/  __/ | | | | | (_| |   < 
+|_____/ \___|\___|_| |_| |_|\__,_|_|\_\
+                                       
+Developed by Databased Club, Indian Institute of Science, Bangalore.
+Official Github Repo: https://github.com/databasedIISc/deemak
+"#;
+
+pub const INITIAL_MSG: &str = "Type commands and press Enter. Try `help` for more info.";
+
 impl ShellScreen {
     pub fn new() -> Self {
         let (rl, thread) = raylib::init()
@@ -27,9 +41,8 @@ impl ShellScreen {
             rl,
             thread,
             input_buffer: String::new(),
-            output_lines: vec![
-                "Type commands and press Enter. Try `help` for more info.".to_string(),
-            ],
+            // output_lines: vec![DEEMAK_BANNER.to_string(), INITIAL_MSG.to_string()],
+            output_lines: vec![INITIAL_MSG.to_string()],
             root_dir: root_dir.clone(),
             current_dir: root_dir, // Both point to same path initially
         }
@@ -113,8 +126,7 @@ impl ShellScreen {
             }
             CommandResult::Clear => {
                 self.output_lines.clear();
-                self.output_lines
-                    .push("Type commands and press Enter. Try `help` for more info.".to_string());
+                self.output_lines.push(INITIAL_MSG.to_string());
             }
             CommandResult::Exit => {
                 std::process::exit(1);
