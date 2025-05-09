@@ -22,6 +22,13 @@ pub fn read(args: &[&str], current_dir: &Path, root_dir: &Path) -> String {
             display_relative_path(&file_path, root_dir)
         );
     }
+    // Check if file is info.json
+    if file_path.ends_with("info.json") {
+        return format!(
+            "read: {}: Access denied to read info.json",
+            display_relative_path(&file_path, root_dir)
+        );
+    }
 
     match fs::read_to_string(&file_path) {
         Ok(content) => content,

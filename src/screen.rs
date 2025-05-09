@@ -1,6 +1,7 @@
 use crate::keys::key_to_char;
 use commands::CommandResult;
 use deemak::commands;
+use deemak::utils;
 use raylib::prelude::*;
 use std::path::PathBuf;
 
@@ -20,7 +21,7 @@ impl ShellScreen {
             .title("DBD Deemak Shell")
             .build();
 
-        let root_dir = Self::find_sekai_root().expect("Sekai root directory not found");
+        let root_dir = utils::find_home().expect("Sekai root directory not found");
 
         Self {
             rl,
@@ -32,24 +33,6 @@ impl ShellScreen {
             root_dir: root_dir.clone(),
             current_dir: root_dir, // Both point to same path initially
         }
-    }
-
-    /// Finds the Sekai root directory by looking for the `sekai/info.json` file
-    fn find_sekai_root() -> Option<PathBuf> {
-        let mut current = std::env::current_dir().ok()?;
-
-        loop {
-            let info_path = current.join("sekai/info.json");
-            if info_path.exists() {
-                return Some(current.join("sekai"));
-            }
-
-            if !current.pop() {
-                break;
-            }
-        }
-
-        None
     }
 
     pub fn window_should_close(&self) -> bool {
