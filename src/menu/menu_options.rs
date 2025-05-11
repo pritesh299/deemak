@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 use std::time::{Duration, Instant};
 
-const MENU_OPTIONS: [&str; 3] = ["Start Shell", "Settings", "Exit"];
+const MENU_OPTIONS: [&str; 3] = ["Start Shell", "About", "Exit"];
 
 pub fn show_menu(rl: &mut RaylibHandle, thread: &RaylibThread) -> Option<usize> {
     let mut selected: usize = 0;

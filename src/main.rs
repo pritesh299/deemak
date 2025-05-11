@@ -1,31 +1,39 @@
 mod keys;
 mod screen;
 mod server;
-use deemak::menu::show_menu;
+use deemak::menu;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    // We have 2 modes, the web and the raylib gui. The web argument runs it on the web, else
+    // raylib gui is set by default.
     if args.len() > 1 && args[1] == "web" {
-        // Launch Rocket web server ()
         server::launch_web();
-    } else {
-        // Launch terminal shell
-        let (mut rl, thread) = raylib::init().size(800, 600).title("DEEMAK Shell").build();
+        return;
+    }
 
-        // Show menu and get selection
-        let selection = show_menu(&mut rl, &thread);
+    // Initialize Raylib window
+    let (mut rl, thread) = raylib::init().size(800, 600).title("DEEMAK Shell").build();
 
-        match selection {
+    // Main menu loop
+    loop {
+        match menu::show_menu(&mut rl, &thread) {
             Some(0) => {
-                // Create shell using existing Raylib instance
+                // Shell mode
                 let mut shell = screen::ShellScreen::new_world(rl, thread);
                 shell.run();
+                break; // Exit after shell closes
             }
             Some(1) => {
-                println!("Settings would go here");
+                // About screen
+                menu::about::show_about(&mut rl, &thread);
             }
-            _ => {} // Exit
+            Some(2) | None => {
+                // Exit
+                break;
+            }
+            _ => unreachable!(),
         }
     }
 }
