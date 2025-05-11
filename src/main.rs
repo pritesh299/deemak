@@ -1,6 +1,7 @@
 mod keys;
 mod screen;
 mod server;
+use deemak::menu::show_menu;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -10,11 +11,21 @@ fn main() {
         server::launch_web();
     } else {
         // Launch terminal shell
-        let mut shell = screen::ShellScreen::new();
+        let (mut rl, thread) = raylib::init().size(800, 600).title("DEEMAK Shell").build();
 
-        while !shell.window_should_close() {
-            shell.update();
-            shell.draw();
+        // Show menu and get selection
+        let selection = show_menu(&mut rl, &thread);
+
+        match selection {
+            Some(0) => {
+                // Create shell using existing Raylib instance
+                let mut shell = screen::ShellScreen::new_world(rl, thread);
+                shell.run();
+            }
+            Some(1) => {
+                println!("Settings would go here");
+            }
+            _ => {} // Exit
         }
     }
 }
