@@ -1,5 +1,6 @@
 mod keys;
 mod screen;
+mod utils;
 mod server;
 use deemak::menu;
 use raylib::ffi::{SetConfigFlags, SetTargetFPS};
@@ -55,3 +56,5 @@ fn main() {
         }
     }
 }
+
+ 
