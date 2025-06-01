@@ -1,10 +1,8 @@
 use super::argparser::ArgParser;
 use super::whereami::display_relative_path;
 use crate::utils::info_reader;
-use std::{
-    env::current_dir,
-    path::{Path, PathBuf},
-};
+use crate::utils::log;
+use std::path::{Path, PathBuf};
 
 pub const HELP_TXT: &str = r#"
 Usage: go [destination]
@@ -22,6 +20,7 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
         "HOME" | "home" => root_dir.to_path_buf(),
         ".." | "back" => {
             if current_dir == root_dir {
+                log::log_warning("go", "Attempted to go back from root directory");
                 return (
                     current_dir.clone(),
                     "You are at the root. Cannot go back further".to_string(),
@@ -36,6 +35,10 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
     let canonical_path = match new_path.canonicalize() {
         Ok(p) => p,
         Err(_) => {
+            log::log_error(
+                "go",
+                &format!("No such directory, path: {}", new_path.display()),
+            );
             return (
                 current_dir.clone(),
                 format!("go: {}: No such directory", destination),
@@ -45,6 +48,13 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
 
     // Verify it's within root and is a directory
     if !canonical_path.starts_with(root_dir) {
+        log::log_warning(
+            "go",
+            &format!(
+                "Access denied: Attempted to go outside root directory: {}",
+                canonical_path.display()
+            ),
+        );
         return (
             current_dir.clone(),
             "Access denied: Cannot go outside root".to_string(),
@@ -53,6 +63,13 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
 
     if !canonical_path.is_dir() {
         if canonical_path.is_file() {
+            log::log_warning(
+                "go",
+                &format!(
+                    "Attempted to go to a file instead of a directory: {}",
+                    canonical_path.display()
+                ),
+            );
             return (
                 current_dir.clone(),
                 format!(
@@ -61,6 +78,14 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
                 ),
             );
         }
+
+        log::log_warning(
+            "go",
+            &format!(
+                "Attempted to go to a non-directory path: {}",
+                canonical_path.display()
+            ),
+        );
         return (
             current_dir.clone(),
             format!("go: {}: Not a directory", destination),
@@ -69,7 +94,7 @@ pub fn navigate(destination: &str, current_dir: &PathBuf, root_dir: &Path) -> (P
 
     // Get directory info if available
     let info_path = canonical_path.join("info.json");
-    let message = match info_reader::read_info(&info_path) {
+    let message = match info_reader::read_validate_info(&info_path) {
         Ok(info) => format!(
             "You have entered {}\n\nAbout:\n{}",
             display_relative_path(&canonical_path, root_dir),
@@ -88,6 +113,16 @@ pub fn go(args: &[&str], current_dir: &PathBuf, root_dir: &Path) -> (PathBuf, St
     let mut parser = ArgParser::new(&[]);
 
     let args_string: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+
+    log::log_debug(
+        "go",
+        &format!(
+            "Parsing arguments: {:?}, Current Directory: {}, Root Directory: {}",
+            args_string,
+            current_dir.display(),
+            root_dir.display()
+        ),
+    );
     // Parse arguments
     match parser.parse(&args_string) {
         Ok(_) => {
@@ -117,7 +152,7 @@ pub fn go(args: &[&str], current_dir: &PathBuf, root_dir: &Path) -> (PathBuf, St
             ),
             _ => (
                 current_dir.clone(),
-                "Error parsing arguments. Try 'help ls' for more information.".to_string(),
+                "Error parsing arguments. Try 'help go' for more information.".to_string(),
             ),
         },
     }
