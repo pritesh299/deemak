@@ -1,12 +1,12 @@
+mod gui_shell;
 mod keys;
-mod screen;
 mod server;
 mod utils;
 use deemak::DEBUG_MODE;
 use deemak::menu;
 use raylib::ffi::{SetConfigFlags, SetTargetFPS};
 use raylib::prelude::get_monitor_width;
-use utils::{debug_mode, log, valid_sekai,globals};
+use utils::{debug_mode, valid_sekai, globals, find_root, log, restore_comp, valid_sekai};
 use valid_sekai::validate_sekai;
 use std::path::PathBuf;
 use once_cell::sync::OnceCell;
@@ -48,6 +48,23 @@ fn main() {
             return;
         } else {
             log::log_info("SEKAI", &format!("Sekai is Valid {:?}", sekai_path));
+
+            // Create the restore file if it does/doesn't exist, because anyways that world only
+            // will be played, so make the restore file of that
+            log::log_info(
+                "SEKAI",
+                &format!(
+                    "Creating restore file for Sekai at {:?}",
+                    sekai_path.join(".dir_info/restore_me")
+                ),
+            );
+            let root_dir =
+                find_root::find_home(&sekai_path).expect("Failed to find root directory");
+            if let Err(e) = restore_comp::backup_sekai("restore", &root_dir) {
+                log::log_error("SEKAI", &format!("Failed to create restore file: {}", e));
+                eprintln!("Error: Failed to create restore file: {}\nContinuing...", e);
+                return;
+            }
         }
         Some(sekai_path)
     } else {
@@ -94,7 +111,7 @@ fn main() {
         match menu::show_menu(&mut rl, &thread) {
             Some(0) => {
                 // Shell mode
-                let mut shell = screen::ShellScreen::new_sekai(
+                let mut shell = gui_shell::ShellScreen::new_sekai(
                     rl,
                     thread,
                     sekai_dir.clone().unwrap(),
