@@ -4,12 +4,12 @@ mod server;
 mod utils;
 use deemak::DEBUG_MODE;
 use deemak::menu;
+use once_cell::sync::OnceCell;
 use raylib::ffi::{SetConfigFlags, SetTargetFPS};
 use raylib::prelude::get_monitor_width;
-use utils::{debug_mode, valid_sekai, globals, find_root, log, restore_comp, valid_sekai};
-use valid_sekai::validate_sekai;
 use std::path::PathBuf;
-use once_cell::sync::OnceCell;
+use utils::{debug_mode, find_root, globals, log, restore_comp, valid_sekai};
+use valid_sekai::validate_sekai;
 
 static WORLD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
@@ -22,7 +22,6 @@ Options:
   --web [Optional]              :   Run the application in web mode (requires a web server).
 "#;
 
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     // first argument is sekai name to parse
@@ -31,8 +30,7 @@ fn main() {
         .expect("DEBUG_MODE already set");
     log::log_info("Application", "Starting DEEMAK Shell");
 
-    
-     let sekai_dir = if args.len() > 1 {
+    let sekai_dir = if args.len() > 1 {
         // get absolute path to the sekai directory
         let sekai_path = std::env::current_dir().unwrap().join(&args[1]);
         log::log_info(
@@ -75,8 +73,10 @@ fn main() {
         return;
     };
 
-    globals::WORLD_DIR.set(sekai_dir.clone().unwrap()).expect("Failed to set world dir");
-    
+    globals::WORLD_DIR
+        .set(sekai_dir.clone().unwrap())
+        .expect("Failed to set world dir");
+
     // We have 2 modes, the web and the raylib gui. The web argument runs it on the web, else
     // raylib gui is set by default.
     if args.iter().any(|arg| arg == "--web") {
