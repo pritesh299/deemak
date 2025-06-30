@@ -1,8 +1,9 @@
 use crate::keys::key_to_char;
+use crate::utils::find_root;
 use crate::utils::wrapit::wrapit;
-use commands::CommandResult;
 use deemak::commands;
-use deemak::utils::find_root;
+use deemak::commands::CommandResult;
+use deemak::utils::prompt::UserPrompter;
 use raylib::ffi::{
     ColorFromHSV, DrawLineEx, DrawRectangle, DrawTextEx, LoadFontEx, MeasureTextEx, Vector2,
 };
@@ -28,6 +29,13 @@ pub struct ShellScreen {
     term_split_ratio: f32,
     font_size: f32,
     scroll_offset: i32,
+    active_prompt: Option<String>,
+}
+
+impl UserPrompter for ShellScreen {
+    fn confirm(&mut self, message: &str) -> bool {
+        self.prompt_yes_no(message)
+    }
 }
 
 pub const DEEMAK_BANNER: &str = r#"
@@ -53,7 +61,8 @@ impl ShellScreen {
     ) -> Self {
         // Loading Font
         let font = unsafe {
-            let path = CString::new("JetBrainsMono-2/fonts/ttf/JetBrainsMono-Medium.ttf").unwrap();
+            let path = CString::new("fontbook/fonts/ttf/JetBrainsMono-Medium.ttf").unwrap();
+
             LoadFontEx(
                 path.as_ptr() as *const c_char,
                 600.0 as c_int,
@@ -85,6 +94,7 @@ impl ShellScreen {
             term_split_ratio: 2.0 / 3.0,
             font_size,
             scroll_offset: 0,
+            active_prompt: None,
         }
     }
 
@@ -181,8 +191,14 @@ impl ShellScreen {
         // } else {
         //     vec![Cow::Borrowed(self.input_buffer.as_str())]
         // };
+        let input_line = if let Some(ref prompt) = self.active_prompt {
+            format!("{} {}", prompt, self.input_buffer)
+        } else {
+            format!("> {}", self.input_buffer)
+        };
+
         let input_lines: Vec<String> = {
-            wrapit(&format!("> {}", self.input_buffer), limit)
+            wrapit(&input_line, limit)
                 .into_iter()
                 .map(|line| line.to_owned())
                 .collect()
@@ -284,8 +300,10 @@ impl ShellScreen {
         self.output_lines.push(format!("> {}", input));
 
         // Parse and execute command
+        let mut current_dir = self.current_dir.clone();
+        let root_dir = self.root_dir.clone();
         let parts: Vec<&str> = input.split_whitespace().collect();
-        match commands::cmd_manager(&parts, &mut self.current_dir, &self.root_dir) {
+        match commands::cmd_manager(&parts, &mut current_dir, &root_dir, self) {
             CommandResult::ChangeDirectory(new_dir, message) => {
                 self.current_dir = new_dir;
                 self.output_lines
@@ -305,6 +323,32 @@ impl ShellScreen {
             CommandResult::NotFound => {
                 self.output_lines
                     .push("Command not found. Try `help`.".to_string());
+            }
+        }
+    }
+
+    pub fn prompt_yes_no(&mut self, message: &str) -> bool {
+        self.active_prompt = Some(format!("{} [y/N]", message));
+        self.input_buffer.clear();
+        self.draw();
+
+        loop {
+            self.update();
+            self.draw();
+
+            if self.rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_Y) {
+                self.active_prompt = None;
+                self.output_lines.push(format!("{} [y/N] yes", message));
+                return true;
+            }
+            if self.rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_N)
+                || self
+                    .rl
+                    .is_key_pressed(raylib::consts::KeyboardKey::KEY_ENTER)
+            {
+                self.active_prompt = None;
+                self.output_lines.push(format!("{} [y/N] no", message));
+                return false;
             }
         }
     }

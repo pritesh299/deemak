@@ -20,3 +20,5 @@ target/
 
 /target
 .DS_Store
+**.dir_info/restore_me**
+**.dir_info/save_me**
