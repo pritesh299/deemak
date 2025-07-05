@@ -1,9 +1,10 @@
 use crate::globals;
 use crate::keys::key_to_char;
-use crate::utils::find_root;
-use crate::utils::wrapit::wrapit;
+use crate::utils::tab_completion::{TabCompletionResult, process_tab_completion};
+use crate::utils::{find_root, shell_history, wrapit::wrapit};
 use deemak::commands;
 use deemak::commands::CommandResult;
+use deemak::commands::list_directory_entries;
 use deemak::utils::prompt::UserPrompter;
 use raylib::ffi::{
     ColorFromHSV, DrawLineEx, DrawRectangle, DrawTextEx, LoadFontEx, MeasureTextEx, Vector2,
@@ -20,6 +21,7 @@ pub struct ShellScreen {
     rl: RaylibHandle,
     thread: RaylibThread,
     input_buffer: String,
+    working_buffer: Option<String>,
     output_lines: Vec<String>,
     current_dir: PathBuf,
     root_dir: PathBuf,
@@ -31,6 +33,7 @@ pub struct ShellScreen {
     font_size: f32,
     scroll_offset: i32,
     active_prompt: Option<String>,
+    history_index: Option<usize>,
 }
 
 impl UserPrompter for ShellScreen {
@@ -39,6 +42,7 @@ impl UserPrompter for ShellScreen {
     }
 }
 
+static mut FIRST_RUN: bool = true;
 pub const DEEMAK_BANNER: &str = r#"
  _____                            _
 |  __ \                          | |
@@ -86,6 +90,7 @@ impl ShellScreen {
             thread,
             input_buffer: String::new(),
             output_lines: Vec::<String>::new(),
+            working_buffer: None,
             root_dir: root_dir.clone(),
             current_dir: root_dir, // Both point to same path initially
             font,
@@ -96,6 +101,7 @@ impl ShellScreen {
             term_split_ratio: 2.0 / 3.0,
             scroll_offset: 0,
             active_prompt: None,
+            history_index: None,
         }
     }
 
@@ -126,21 +132,130 @@ impl ShellScreen {
         match self.rl.get_key_pressed() {
             Some(KeyboardKey::KEY_ENTER) => {
                 let input = take(&mut self.input_buffer);
-                self.process_input(&input);
-                self.scroll_offset = 0;
+                if !input.is_empty() {
+                    self.process_shell_input(&input);
+                    self.scroll_offset = 0;
+                    shell_history::add_to_history(&input);
+                    self.history_index = None;
+                    self.working_buffer = None; // Clear working buffer after command execution
+                } else {
+                    // If input is empty, just add a new line
+                    if !unsafe { FIRST_RUN } {
+                        self.output_lines.push("> ".to_string());
+                    } else {
+                        unsafe { FIRST_RUN = false };
+                    }
+                }
             }
             Some(KeyboardKey::KEY_BACKSPACE) => {
                 if !self.input_buffer.is_empty() {
                     self.input_buffer.pop();
                 }
             }
+
+            Some(KeyboardKey::KEY_TAB) => {
+                // Get current command parts
+                let parts: Vec<&str> = self.input_buffer.split_whitespace().collect();
+
+                if parts.len() > 1 {
+                    // Get the last part (what we're trying to complete)
+                    let last_part = parts.last().unwrap();
+
+                    // List directory contents
+                    let (files, dirs) = list_directory_entries(&self.current_dir, &self.root_dir);
+                    let all_matches = [dirs, files].concat();
+
+                    // Find matches
+                    let matches: Vec<String> = all_matches
+                        .iter()
+                        .filter(|&name| name.starts_with(last_part))
+                        .cloned()
+                        .collect();
+
+                    // Calculate terminal dimensions
+                    let term_width = ((self.window_width as f32 * (self.term_split_ratio - 0.12))
+                        / self.char_width)
+                        .floor() as usize;
+                    let term_height = (self.window_height / self.font_size as i32) as usize;
+
+                    // Process tab completion
+                    let result = process_tab_completion(
+                        parts,
+                        matches,
+                        term_width,
+                        term_height,
+                        &self.input_buffer,
+                        self.active_prompt.as_deref(),
+                    );
+
+                    match result {
+                        TabCompletionResult::SingleMatch(new_input) => {
+                            self.input_buffer = new_input;
+                        }
+                        TabCompletionResult::CommonPrefix(new_input) => {
+                            self.input_buffer = new_input;
+                        }
+                        TabCompletionResult::DisplayCompletions {
+                            current_line,
+                            completion_lines,
+                            should_display_all,
+                        } => {
+                            self.output_lines.push(current_line);
+                            if should_display_all {
+                                if self.prompt_yes_no(&format!(
+                                    "Display all {} possibilities? (y or n)",
+                                    completion_lines.len()
+                                )) {
+                                    self.output_lines.extend(completion_lines);
+                                }
+                            } else {
+                                self.output_lines.extend(completion_lines);
+                            }
+                            self.scroll_offset = 0;
+                        }
+                        TabCompletionResult::NoAction => {}
+                    }
+                }
+            }
+            Some(KeyboardKey::KEY_UP) => {
+                // Save current buffer if we're starting history navigation
+                if self.history_index.is_none() && !self.input_buffer.is_empty() {
+                    self.working_buffer = Some(self.input_buffer.clone());
+                }
+
+                let history = shell_history::get_history();
+                if !history.is_empty() {
+                    let new_index = match self.history_index {
+                        Some(index) if index > 0 => index - 1,
+                        Some(index) => index,      // already at first item
+                        None => history.len() - 1, // start from most recent
+                    };
+                    self.input_buffer = history[new_index].clone();
+                    self.history_index = Some(new_index);
+                }
+            }
+            Some(KeyboardKey::KEY_DOWN) => {
+                if let Some(index) = self.history_index {
+                    let history = shell_history::get_history();
+                    if index < history.len() - 1 {
+                        // Move to next item in history
+                        let new_index = index + 1;
+                        self.input_buffer = history[new_index].clone();
+                        self.history_index = Some(new_index);
+                    } else {
+                        // Reached the end of history - restore working buffer
+                        self.input_buffer = self.working_buffer.take().unwrap_or_default();
+                        self.history_index = None;
+                    }
+                }
+            }
             Some(key) => {
-                // Only accept printable ASCII characters
                 let shift = self.rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
                     || self.rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
 
                 if let Some(c) = key_to_char(key, shift) {
                     self.input_buffer.push(c);
+                    self.history_index = None;
                 }
             }
             None => {}
@@ -157,7 +272,6 @@ impl ShellScreen {
             self.scroll_offset -= (scroll_y / 2.00) as i32;
         }
     }
-
     pub fn draw(&mut self) {
         // Draw output lines
         let char_width = unsafe {
@@ -206,9 +320,9 @@ impl ShellScreen {
         };
 
         let length_input: usize = input_lines.len();
-        visible_lines.extend(input_lines.into_iter());
+        visible_lines.extend(input_lines);
 
-        let mut index: usize = 0;
+        let mut index: usize;
 
         index = min(
             max(
@@ -217,7 +331,7 @@ impl ShellScreen {
             ),
             visible_lines.len() as i32 - 1,
         ) as usize;
-        let display_lines = &visible_lines[index as usize..];
+        let display_lines = &visible_lines[index..];
 
         for (i, line) in display_lines.iter().enumerate() {
             unsafe {
@@ -292,19 +406,30 @@ impl ShellScreen {
         }
     }
 
-    pub fn process_input(&mut self, mut input: &str) {
+    pub fn process_input(&mut self, mut input: &str, prefix: Option<&str>) -> Vec<String> {
         if input.is_empty() {
-            return;
+            return self.output_lines.clone();
         }
 
         // Add input to output
-        self.output_lines.push(format!("> {}", input));
+        self.output_lines
+            .push(format!("{} {}", prefix.unwrap_or(""), input));
+
+        self.output_lines.clone()
+    }
+
+    pub fn process_shell_input(&mut self, input: &str) {
+        // If input is empty, do nothing
+        if input.trim().is_empty() {
+            return;
+        }
+        self.output_lines = self.process_input(input, Some(">"));
 
         // Parse and execute command
         let mut current_dir = self.current_dir.clone();
         let root_dir = self.root_dir.clone();
         let parts: Vec<&str> = input.split_whitespace().collect();
-        match commands::cmd_manager(&parts, &mut current_dir, &root_dir, self) {
+        match commands::cmd_manager(&parts, &current_dir, &root_dir, self) {
             CommandResult::ChangeDirectory(new_dir, message) => {
                 self.current_dir = new_dir;
                 self.output_lines
