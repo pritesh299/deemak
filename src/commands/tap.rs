@@ -1,8 +1,9 @@
 use super::argparser::ArgParser;
 use super::cmds::{check_dir_info, normalize_path};
 use super::display_relative_path;
+use crate::metainfo::info_reader::add_obj_to_info;
+use crate::metainfo::valid_sekai::create_dir_info;
 use crate::utils::log;
-use crate::utils::valid_sekai::create_dir_info;
 use std::path::{Path, PathBuf};
 
 pub const HELP_TXT: &str = r#"
@@ -29,10 +30,17 @@ pub fn create_file(destination: &str, current_dir: &Path, root_dir: &Path) -> St
 
     // Create the file or directory
     match std::fs::File::create(new_path) {
-        Ok(_) => format!(
-            "Created file: {}",
-            display_relative_path(new_path, root_dir)
-        ),
+        Ok(_) => {
+            // Add the object to info.json
+            let obj_name = new_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let result = add_obj_to_info(new_path, obj_name, None).map_err(|e| e.to_string()); // Convert InfoError to String
+
+            log::log_result("tap", result, "Adding object to info.json");
+            format!(
+                "Created file: {}",
+                display_relative_path(new_path, root_dir)
+            )
+        }
         Err(e) => format!("tap: {}: {}", destination, e),
     }
 }
@@ -58,6 +66,12 @@ pub fn create_directory(destination: &str, current_dir: &Path, root_dir: &Path) 
                     display_relative_path(new_path, root_dir)
                 );
             }
+
+            // Add the object to info.json
+            let obj_name = new_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let result = add_obj_to_info(new_path, obj_name, None).map_err(|e| e.to_string()); // Convert InfoError to String
+
+            log::log_result("tap", result, "Adding object to info.json");
             format!(
                 "Created directory: {}",
                 display_relative_path(new_path, root_dir)

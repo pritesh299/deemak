@@ -1,6 +1,6 @@
 {
-  "location": "HOME/room_10",
-  "about": "You are in 'HOME/room_10'. Look around and explore!",
+  "location": "HOME/some1",
+  "about": "You are in 'HOME/some1'. Look around and explore!",
   "objects": {
     "shit.txt": {
       "locked": "00"

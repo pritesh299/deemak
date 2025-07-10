@@ -1,4 +1,9 @@
 {
-  "about": "You are in your room. You can study here. And look, your dog has shit in your room, gotta clean before mom sees!",
-  "location": "room"
+  "location": "HOME/room_1",
+  "about": "Yeeehhaa! Look around and explore!",
+  "objects": {
+    "cat.txt": {
+      "locked": "10"
+    }
+  }
 }
