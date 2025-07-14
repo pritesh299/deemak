@@ -85,7 +85,7 @@ impl ShellScreen {
             MeasureTextEx(font, cstr.as_ptr(), font_size, 1.2).x
         };
         let root_dir =
-            find_root::find_home(&sekai_dir).expect("Could not find sekai home directory");
+            find_root::get_home(&sekai_dir).expect("Could not find sekai home directory");
 
         Self {
             rl,
@@ -139,9 +139,8 @@ impl ShellScreen {
                     self.process_shell_input(&input);
                     self.scroll_offset = 0;
                     shell_history::add_to_history(&input);
+                    self.history_index = None;
                     self.working_buffer = None; // Clear working buffer after command execution
-                    self.cursor_pos = 0; // Reset cursor position
-                    self.history_index = None; // Reset history index
                 } else {
                     // If input is empty, just add a new line
                     if !unsafe { FIRST_RUN } {
@@ -150,6 +149,7 @@ impl ShellScreen {
                         unsafe { FIRST_RUN = false };
                     }
                 }
+                self.cursor_pos = 0; // Reset cursor position
             }
             Some(KeyboardKey::KEY_BACKSPACE) => {
                 if !self.input_buffer.is_empty() && self.cursor_pos > 0 {
@@ -343,11 +343,6 @@ impl ShellScreen {
         d.clear_background(Color::BLACK);
 
         // Input
-        // let input_lines = if self.input_buffer.len()+1 > limit {
-        //     wrap(&self.input_buffer, limit)
-        // } else {
-        //     vec![Cow::Borrowed(self.input_buffer.as_str())]
-        // };
         let input_line = if let Some(ref prompt) = self.active_prompt {
             format!("{} {}", prompt, self.input_buffer)
         } else {
@@ -414,7 +409,7 @@ impl ShellScreen {
 
         // CURSOR
         let cursor_prefix = if let Some(ref prompt) = self.active_prompt {
-            format!("{prompt} ")
+            format!(">{prompt}")
         } else {
             "> ".to_string()
         };
@@ -430,7 +425,6 @@ impl ShellScreen {
             (MeasureTextEx(self.font, c_string.as_ptr(), self.font_size, 1.2).x)
                 % ((limit as f32 + 6.0) * char_width)
         };
-
         // Draw cursor
         unsafe {
             DrawRectangle(
@@ -536,28 +530,49 @@ impl ShellScreen {
         self.active_prompt = Some(message.to_string());
         self.input_buffer.clear();
         self.draw();
+        let excess = self.cursor_pos;
+        self.cursor_pos = 0;
 
         loop {
             self.update();
             self.draw();
 
-            if self
-                .rl
-                .is_key_pressed(raylib::consts::KeyboardKey::KEY_ENTER)
-            {
-                let input = take(&mut self.input_buffer);
-                self.active_prompt = None;
-                if !input.is_empty() {
+            match self.rl.get_key_pressed() {
+                Some(KeyboardKey::KEY_ENTER) => {
+                    let input = take(&mut self.input_buffer);
+                    self.active_prompt = None;
                     self.output_lines.push(format!("{message}: {input}"));
+                    self.cursor_pos = 0;
                     return input;
                 }
-            } else if self
-                .rl
-                .is_key_pressed(raylib::consts::KeyboardKey::KEY_BACKSPACE)
-                && !self.input_buffer.is_empty()
-            {
-                self.input_buffer.pop();
+                Some(KeyboardKey::KEY_BACKSPACE) => {
+                    if !self.input_buffer.is_empty() && self.cursor_pos > 0 {
+                        self.input_buffer.remove(self.cursor_pos - 1);
+                        self.cursor_pos -= 1;
+                    }
+                }
+                Some(KeyboardKey::KEY_LEFT) => {
+                    if self.cursor_pos > 0 {
+                        self.cursor_pos -= 1;
+                    }
+                }
+                Some(KeyboardKey::KEY_RIGHT) => {
+                    if self.cursor_pos < self.input_buffer.len() {
+                        self.cursor_pos += 1;
+                    }
+                }
+                Some(key) => {
+                    let shift = self.rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                        || self.rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
+
+                    if let Some(c) = key_to_char(key, shift) {
+                        self.input_buffer.insert(self.cursor_pos, c);
+                        self.cursor_pos += 1;
+                    }
+                }
+                None => {}
             }
         }
+        // Reset cursor position after input
     }
 }

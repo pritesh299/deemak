@@ -1,3 +1,4 @@
+use crate::utils::globals::{USER_NAME, USER_PASSWORD, USER_SALT};
 use chrono::{Duration, Utc};
 use data_encoding::HEXUPPER;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -203,7 +204,16 @@ pub fn login(input: Form<AuthInput>) -> Json<AuthResponse> {
                     &EncodingKey::from_secret(JWT_SECRET),
                 )
                 .expect("Failed to create token");
-
+                // Set global USER_ID and USER_SALT
+                USER_NAME
+                    .set(user.username.clone())
+                    .expect("Failed to set USER_ID");
+                USER_SALT
+                    .set(user.salt.clone())
+                    .expect("Failed to set USER_SALT");
+                USER_PASSWORD
+                    .set(input.password.clone())
+                    .expect("Failed to set USER_PASSWORD");
                 return Json(AuthResponse {
                     status: true,
                     message: "Login successful".into(),

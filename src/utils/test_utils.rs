@@ -1,4 +1,4 @@
-use crate::metainfo::info_reader::{Info, ObjectInfo};
+use crate::metainfo::valid_sekai::create_dir_info;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -8,38 +8,13 @@ use walkdir::WalkDir;
 
 /// Creates file at the specified path with the given content.
 pub fn create_file<P: AsRef<Path>>(path: P, content: &str) {
-    let path = path.as_ref();
-    if path.is_dir() || path.extension().is_none() {
-        // Treat as directory: create all parent directories
-        fs::create_dir_all(path).expect("Failed to create directory");
-    } else {
-        // Treat as file: create parent directories, then file
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("Failed to create parent directories");
-        }
-        let mut file = File::create(path).expect("Failed to create file");
-        file.write_all(content.as_bytes())
-            .expect("Failed to write to file");
-    }
-}
-
-/// Writes to a file if it exists, else creates it with the given content.
-pub fn write_file<P: AsRef<Path>>(path: P, content: &str) {
-    if let Ok(mut file) = File::open(&path) {
-        writeln!(file, "{content}").unwrap();
-    } else {
-        create_file(path, content);
-    }
+    let mut file = File::create(path).unwrap();
+    writeln!(file, "{content}").unwrap();
 }
 
 /// Removes the file at the specified path.
 pub fn remove_file<P: AsRef<Path>>(path: P) {
-    let path = path.as_ref();
-    if path.is_dir() && path.exists() {
-        std::fs::remove_dir_all(path).unwrap();
-    } else if path.exists() {
-        std::fs::remove_file(path).unwrap();
-    }
+    fs::remove_file(path).unwrap();
 }
 
 /// Helper to create a test directory wi/// Creates a temporary directory with the following structure:
@@ -56,7 +31,7 @@ pub fn remove_file<P: AsRef<Path>>(path: P) {
 ///     └── nested2/
 ///         ├── file6.txt
 ///         └── file7.txt
-pub fn setup_test_dir() -> (TempDir, PathBuf) {
+pub fn setup_test_dir(make_dirinfo: bool) -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
     let root_path = temp_dir.path().to_path_buf();
 
@@ -79,6 +54,16 @@ pub fn setup_test_dir() -> (TempDir, PathBuf) {
     fs::create_dir(&nested2_path).unwrap();
     create_file(nested2_path.join("file6.txt"), "hello from file6");
     create_file(nested2_path.join("file7.txt"), "hello from file7");
+
+    // NOTE: We assume that create_dir_info is correctly implemented. It's tests are elsewhere.
+    // If you find that there is issue in the dir_info creation, please check first that those
+    // tests are passing.
+    if make_dirinfo && !create_dir_info(&root_path, true) {
+        panic!(
+            "Failed to create valid .dir_info for root directory: {}",
+            root_path.display()
+        );
+    }
 
     (temp_dir, root_path)
 }
@@ -130,23 +115,6 @@ pub fn get_dir_contents(path: &PathBuf, ignore_dir_info: bool) -> HashMap<PathBu
     contents
 }
 
-pub fn create_dummy_dir_info(path: &Path, objects: Option<HashMap<String, ObjectInfo>>) {
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let mut info = Info {
-        location: "test".to_string(),
-        about: "test".to_string(),
-        objects: objects.unwrap_or_default(),
-    };
-    // Ensure default locked status if not specified
-    for obj in info.objects.values_mut() {
-        obj.properties
-            .entry("locked".to_string())
-            .or_insert(serde_json::Value::String("00".to_string()));
-    }
-    let json = serde_json::to_string_pretty(&info).unwrap();
-    fs::write(path, json).unwrap();
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -155,7 +123,7 @@ mod test {
 
     #[test]
     fn test_get_dir_contents() {
-        let (_temp_dir, root_path) = setup_test_dir();
+        let (_temp_dir, root_path) = setup_test_dir(false);
         let contents_got = get_dir_contents(&root_path, true);
 
         let mut expected = HashMap::new();

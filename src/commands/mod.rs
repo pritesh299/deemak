@@ -34,3 +34,9 @@ mod argparser;
 mod restore;
 
 mod save;
+
+mod solve;
+pub use solve::solve;
+
+mod unlock;
+pub use unlock::unlock;

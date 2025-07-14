@@ -28,6 +28,20 @@ impl ObjectInfo {
             .insert("locked".to_string(), Value::String(locked));
         obj
     }
+
+    pub fn with_decrypt_me(decrypt_me: String) -> Self {
+        let mut obj = Self::new();
+        obj.properties
+            .insert("decrypt_me".to_string(), Value::String(decrypt_me));
+        obj
+    }
+
+    pub fn with_obj_salt(obj_salt: String) -> Self {
+        let mut obj = Self::new();
+        obj.properties
+            .insert("obj_salt".to_string(), Value::String(obj_salt));
+        obj
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -57,6 +71,7 @@ impl Info {
     /// Creates default Info values for a path
     pub fn default_for_path(path: &Path, home_dir: bool) -> Self {
         let norm_path = normalize_path(path);
+        // NOTE: Since deafult Permission is "00", decrypt_me and obj_salt are not going to be set.
         Info {
             location: Self::default_location(&norm_path, home_dir),
             about: Self::default_about(&norm_path, home_dir),
@@ -139,6 +154,34 @@ pub fn read_validate_info(info_path: &Path) -> Result<Info, InfoError> {
                 return Err(InfoError::ValidationError(
                     "Invalid 'locked' value, must be a 2-bit string".to_string(),
                 ));
+            }
+
+            // If is_level is '1', further checks are needed
+            if let Some(is_locked) = s.chars().nth(1).map(|c| c == '1') {
+                if !is_locked {
+                    continue; // Not locked, skip further checks
+                }
+                // ensure it has a 'decrypt_me' property
+                if !obj_info.properties.contains_key("decrypt_me") {
+                    return Err(InfoError::ValidationError(
+                        "Locked objects must have a 'decrypt_me' property".to_string(),
+                    ));
+                }
+                // obj_salt is required for locked objects
+                if !obj_info.properties.contains_key("obj_salt") {
+                    return Err(InfoError::ValidationError(
+                        "Locked objects must have an 'obj_salt' property".to_string(),
+                    ));
+                }
+                // enure it has a "compare me property
+                if !obj_info.properties.contains_key("compare_me") {
+                    return Err(InfoError::ValidationError(
+                        "Locked objects must have a 'compare_me' property".to_string(),
+                    ));
+                }
+            } else {
+                // If not locked, ensure 'decrypt_me' is not present
+                obj_info.properties.remove("decrypt_me");
             }
         }
 
@@ -248,3 +291,70 @@ pub fn read_get_obj_info(info_path: &Path, obj_name: &str) -> Result<ObjectInfo,
         .unwrap_or_default())
 }
 
+pub fn get_encrypted_flag(path: &Path, level_name: &str) -> Result<String, String> {
+    //the flag is stored in ./dir_info/info.json of parent directory
+    match read_get_obj_info(
+        &path.parent().unwrap().join(".dir_info/info.json"),
+        level_name,
+    ) {
+        Ok(obj_info) => {
+            if let Some(decrypt_me) = obj_info.properties.get("decrypt_me") {
+                if let serde_json::Value::String(flag_str) = decrypt_me {
+                    Ok(flag_str.clone())
+                } else {
+                    Err("decrypt_me property is not a string.".to_string())
+                }
+            } else {
+                Err("decrypt_me property not found in object info.".to_string())
+            }
+        }
+        Err(e) => Err("Error reading object info".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_update_obj_status() {
+        // Create a temporary directory for the test
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".dir_info")).unwrap();
+        let info_path = dir.path().join(".dir_info/info.json");
+
+        // Create a dummy info.json file
+        let mut file = File::create(&info_path).unwrap();
+        file.write_all(b"{\"location\":\"test\",\"about\":\"test\",\"objects\":{}}")
+            .unwrap();
+
+        // Create a dummy object file
+        let obj_path = dir.path().join("file.txt");
+        File::create(&obj_path).unwrap();
+
+        // Update the object's status
+        update_obj_status(
+            &obj_path,
+            "file.txt",
+            "locked",
+            serde_json::Value::Bool(true),
+        )
+        .unwrap();
+
+        // Verify the update
+        let data = fs::read_to_string(&info_path).unwrap();
+        let info: Info = serde_json::from_str(&data).unwrap();
+        assert_eq!(
+            info.objects
+                .get("file.txt")
+                .unwrap()
+                .properties
+                .get("locked")
+                .unwrap(),
+            &serde_json::Value::Bool(true)
+        );
+    }
+}
