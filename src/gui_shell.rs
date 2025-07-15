@@ -1,23 +1,25 @@
+use crate::commands::cmds::{CommandResult, cmd_manager};
+use crate::commands::ls::list_directory_entries;
 use crate::keys::key_to_char;
+use crate::menu;
+use crate::utils::prompt::UserPrompter;
 use crate::utils::tab_completion::{TabCompletionResult, process_tab_completion};
 use crate::utils::{find_root, shell_history, wrapit::wrapit};
-use deemak::commands::cmds::{CommandResult, cmd_manager};
-use deemak::commands::ls::list_directory_entries;
-use deemak::utils::prompt::UserPrompter;
 use raylib::ffi::{
-    ColorFromHSV, DrawLineEx, DrawRectangle, DrawTextEx, LoadFontEx, MeasureTextEx, Vector2,
+    ColorFromHSV, DrawLineEx, DrawRectangle, DrawTextEx, LoadFontEx, MeasureTextEx, SetExitKey,
+    Vector2,
 };
 use raylib::prelude::*;
 use std::cmp::max;
 use std::cmp::min;
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::{mem::take, os::raw::c_int, path::PathBuf, process::exit};
+use std::{mem::take, os::raw::c_int, path::PathBuf};
 use textwrap::wrap;
 
-pub struct ShellScreen {
-    rl: RaylibHandle,
-    thread: RaylibThread,
+pub struct ShellScreen<'a> {
+    rl: &'a mut RaylibHandle,
+    thread: &'a RaylibThread,
     input_buffer: String,
     working_buffer: Option<String>,
     output_lines: Vec<String>,
@@ -35,7 +37,7 @@ pub struct ShellScreen {
     cursor_pos: usize,
 }
 
-impl UserPrompter for ShellScreen {
+impl UserPrompter for ShellScreen<'_> {
     fn confirm(&mut self, message: &str) -> bool {
         self.prompt_yes_no(message)
     }
@@ -59,10 +61,10 @@ Official Github Repo: https://github.com/databasedIISc/deemak
 
 pub const INITIAL_MSG: &str = "Type commands and press Enter. Try `help` for more info.";
 
-impl ShellScreen {
+impl<'a> ShellScreen<'a> {
     pub fn new_sekai(
-        rl: RaylibHandle,
-        thread: RaylibThread,
+        rl: &'a mut RaylibHandle,
+        thread: &'a RaylibThread,
         sekai_dir: PathBuf,
         font_size: f32,
     ) -> Self {
@@ -77,7 +79,9 @@ impl ShellScreen {
                 0,
             )
         };
-
+        unsafe {
+            SetExitKey(0i32); // No exit key
+        }
         let window_width = rl.get_screen_width();
         let window_height = rl.get_screen_height();
         let char_width = unsafe {
@@ -86,7 +90,6 @@ impl ShellScreen {
         };
         let root_dir =
             find_root::get_home(&sekai_dir).expect("Could not find sekai home directory");
-
         Self {
             rl,
             thread,
@@ -339,7 +342,7 @@ impl ShellScreen {
         self.scroll_offset = max(self.scroll_offset, min_scroll_offset);
         self.scroll_offset = min(self.scroll_offset, 0); // Never go below bottom
 
-        let mut d = self.rl.begin_drawing(&self.thread);
+        let mut d = self.rl.begin_drawing(self.thread);
         d.clear_background(Color::BLACK);
 
         // Input
@@ -492,7 +495,7 @@ impl ShellScreen {
                 self.output_lines.push(INITIAL_MSG.to_string());
             }
             CommandResult::Exit => {
-                exit(1);
+                run_gui_loop(self.rl, self.thread, self.root_dir.clone(), self.font_size);
             }
             CommandResult::NotFound => {
                 self.output_lines
@@ -574,5 +577,43 @@ impl ShellScreen {
             }
         }
         // Reset cursor position after input
+    }
+}
+
+/// Runs the main GUI loop for the Sekai shell
+pub fn run_gui_loop(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    sekai_dir: PathBuf,
+    font_size: f32,
+) {
+    loop {
+        // Show main menu and get user selection
+        let menu_selection = menu::show_menu(rl, thread);
+
+        match menu_selection {
+            Some(0) => {
+                // Shell mode
+                let mut shell = ShellScreen::new_sekai(rl, thread, sekai_dir.clone(), font_size);
+                shell.run();
+            }
+            Some(1) => {
+                // About screen
+                menu::about::show_about(rl, thread);
+                // After about screen closes, return to menu
+                continue;
+            }
+            Some(2) => {
+                // Settings screen
+                menu::settings::show_settings(rl, thread);
+                // After settings screen closes, return to menu
+                continue;
+            }
+            Some(3) | None => {
+                // Exit
+                std::process::exit(0); // Exit the application
+            }
+            _ => unreachable!(),
+        }
     }
 }
