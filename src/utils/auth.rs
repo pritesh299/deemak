@@ -1,4 +1,4 @@
-use crate::utils::globals::{USER_NAME, USER_PASSWORD, USER_SALT};
+use crate::utils::globals::{UserInfo, get_user_info, set_user_info};
 use chrono::{Duration, Utc};
 use data_encoding::HEXUPPER;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -58,14 +58,13 @@ pub fn load_users() -> Vec<User> {
     })
 }
 
-fn save_users(users: &[User]) {
+pub fn save_users(users: &[User]) {
     let data = serde_json::to_string_pretty(users).expect("Failed to serialize users");
     let mut file = File::create(USER_FILE).expect("Failed to write file");
     file.write_all(data.as_bytes()).unwrap();
 }
 
-// Password hashing
-fn hash_password(password: &str) -> Result<(String, String), ring::error::Unspecified> {
+pub fn hash_password(password: &str) -> Result<(String, String), ring::error::Unspecified> {
     let rng = rand::SystemRandom::new();
     let mut salt = [0u8; CREDENTIAL_LEN];
     rng.fill(&mut salt)?;
@@ -78,7 +77,6 @@ fn hash_password(password: &str) -> Result<(String, String), ring::error::Unspec
         password.as_bytes(),
         &mut hash,
     );
-
     Ok((HEXUPPER.encode(&salt), HEXUPPER.encode(&hash)))
 }
 
@@ -204,16 +202,16 @@ pub fn login(input: Form<AuthInput>) -> Json<AuthResponse> {
                     &EncodingKey::from_secret(JWT_SECRET),
                 )
                 .expect("Failed to create token");
-                // Set global USER_ID and USER_SALT
-                USER_NAME
-                    .set(user.username.clone())
-                    .expect("Failed to set USER_ID");
-                USER_SALT
-                    .set(user.salt.clone())
-                    .expect("Failed to set USER_SALT");
-                USER_PASSWORD
-                    .set(input.password.clone())
-                    .expect("Failed to set USER_PASSWORD");
+
+                // Create and set the global UserInfo
+                let mut user_info = UserInfo::new(
+                    user.username.clone(),
+                    user.salt.clone(),
+                    user.password_hash.clone(),
+                );
+                user_info.authenticate();
+                set_user_info(user_info).ok(); // Set the global user info, ignoring error if already set
+
                 return Json(AuthResponse {
                     status: true,
                     message: "Login successful".into(),
@@ -239,4 +237,52 @@ pub fn login(input: Form<AuthInput>) -> Json<AuthResponse> {
         message: "Invalid request".into(),
         token: None,
     })
+}
+
+// UserInfo integration functions
+/// Get current authenticated user info
+pub fn get_current_user() -> Option<&'static UserInfo> {
+    get_user_info()
+}
+
+/// Check if user is currently authenticated
+pub fn is_user_authenticated() -> bool {
+    if let Some(user_info) = get_user_info() {
+        user_info.is_authenticated()
+    } else {
+        false
+    }
+}
+
+/// Get current user's username safely
+pub fn get_current_username() -> Option<&'static str> {
+    get_user_info().map(|user| user.get_username())
+}
+
+/// Get user session duration
+pub fn get_session_duration() -> Option<std::time::Duration> {
+    get_user_info()?.get_login_duration()
+}
+
+/// Logout current user
+pub fn logout_user() {
+    // For now, we create a new  UserInfo to "logout"
+    let default_user = UserInfo::default();
+    let _ = set_user_info(default_user);
+}
+
+/// Create a UserInfo from existing user data
+pub fn create_user_info_from_user(user: &User) -> UserInfo {
+    UserInfo::new(
+        user.username.clone(),
+        user.salt.clone(),
+        user.password_hash.clone(),
+    )
+}
+
+/// Authenticate a user and set global UserInfo
+pub fn authenticate_user(user: &User) -> Result<(), UserInfo> {
+    let mut user_info = create_user_info_from_user(user);
+    user_info.authenticate();
+    set_user_info(user_info)
 }

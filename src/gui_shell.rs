@@ -4,6 +4,7 @@ use crate::keys::key_to_char;
 use crate::menu;
 use crate::menu::menu_options::MenuOption;
 use crate::metainfo::info_reader::read_validate_info;
+use crate::utils::config::{self, FONT_OPTIONS};
 use crate::utils::tab_completion::{TabCompletionResult, process_tab_completion};
 use crate::utils::{find_root, shell_history, wrapit::wrapit};
 use crate::utils::{log, prompt::UserPrompter};
@@ -77,9 +78,15 @@ impl<'a> ShellScreen<'a> {
         sekai_dir: PathBuf,
         font_size: f32,
     ) -> Self {
+        // Load font index from config
+        let font_index = config::load_config().font_index;
+        let font_path = FONT_OPTIONS
+            .get(font_index)
+            .map(|(_, path)| *path)
+            .unwrap_or("fontbook/fonts/ttf/JetBrainsMono-Medium.ttf");
         // Loading Font
         let font = unsafe {
-            let path = CString::new("fontbook/fonts/ttf/JetBrainsMono-Medium.ttf").unwrap();
+            let path = CString::new(font_path).unwrap();
 
             LoadFontEx(
                 path.as_ptr() as *const c_char,
