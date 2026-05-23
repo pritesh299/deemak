@@ -222,12 +222,11 @@ impl ShellScreen {
                 }
                 self.cursor_pos = 0; // Reset cursor position
             }
-            Some(KeyboardKey::KEY_BACKSPACE) => {
-                if !self.input_buffer.is_empty() && self.cursor_pos > 0 {
+            Some(KeyboardKey::KEY_BACKSPACE)
+                if !self.input_buffer.is_empty() && self.cursor_pos > 0 => {
                     self.input_buffer.remove(self.cursor_pos - 1);
                     self.cursor_pos -= 1;
                 }
-            }
             Some(KeyboardKey::KEY_TAB) => {
                 // Get current command parts
                 let parts: Vec<&str> = self.input_buffer.split_whitespace().collect();
@@ -332,16 +331,14 @@ impl ShellScreen {
                     self.cursor_pos = self.input_buffer.len();
                 }
             }
-            Some(KeyboardKey::KEY_LEFT) => {
-                if self.cursor_pos > 0 {
+            Some(KeyboardKey::KEY_LEFT)
+                if self.cursor_pos > 0 => {
                     self.cursor_pos -= 1;
                 }
-            }
-            Some(KeyboardKey::KEY_RIGHT) => {
-                if self.cursor_pos < self.input_buffer.len() {
+            Some(KeyboardKey::KEY_RIGHT)
+                if self.cursor_pos < self.input_buffer.len() => {
                     self.cursor_pos += 1;
                 }
-            }
             Some(key) => {
                 let ctrl_pressed = rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
                     || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL);
@@ -385,8 +382,8 @@ impl ShellScreen {
                                 self.scroll_offset = 0;
                             }
                         }
-                        KeyboardKey::KEY_V => {
-                            if shift_pressed {
+                        KeyboardKey::KEY_V
+                            if shift_pressed => {
                                 // Paste from clipboard
                                 let clipboard_text = rl.get_clipboard_text().unwrap_or_default();
                                 if !clipboard_text.is_empty() {
@@ -397,7 +394,6 @@ impl ShellScreen {
                                     self.cursor_pos += filtered_text.len();
                                 }
                             }
-                        }
                         _ => {}
                     }
                 } else if let Some(c) = key_to_char(key, shift_pressed) {
@@ -800,22 +796,19 @@ impl ShellScreen {
                     self.cursor_pos = 0;
                     return input;
                 }
-                Some(KeyboardKey::KEY_BACKSPACE) => {
-                    if !self.input_buffer.is_empty() && self.cursor_pos > 0 {
+                Some(KeyboardKey::KEY_BACKSPACE)
+                    if !self.input_buffer.is_empty() && self.cursor_pos > 0 => {
                         self.input_buffer.remove(self.cursor_pos - 1);
                         self.cursor_pos -= 1;
                     }
-                }
-                Some(KeyboardKey::KEY_LEFT) => {
-                    if self.cursor_pos > 0 {
+                Some(KeyboardKey::KEY_LEFT)
+                    if self.cursor_pos > 0 => {
                         self.cursor_pos -= 1;
                     }
-                }
-                Some(KeyboardKey::KEY_RIGHT) => {
-                    if self.cursor_pos < self.input_buffer.len() {
+                Some(KeyboardKey::KEY_RIGHT)
+                    if self.cursor_pos < self.input_buffer.len() => {
                         self.cursor_pos += 1;
                     }
-                }
                 Some(key) => {
                     let shift = rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
                         || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
